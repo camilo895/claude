@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { API } from '../constants.js'
 
 const COLUNAS_ESPERADAS = [
@@ -23,27 +24,24 @@ const COLUNAS_LABEL = {
   observacoes:      'Observações',
 }
 
-const OBRIGATORIOS = ['comprador', 'numero_vendedor'] // comprador + qualquer identificador de vendedor
-
 function normalize(s) {
   return String(s).toLowerCase()
     .normalize('NFD').replace(/\p{Diacritic}/gu, '')
     .replace(/[^a-z0-9]/g, '')
 }
 
-// Mapeamento automático: detecta a coluna da planilha e associa ao campo do sistema
 function autoMapear(headers) {
   const aliases = {
     numero:           ['numerocotacao','cotacao','pedido','numero','cod','id','nro'],
     numero_vendedor:  ['nrovendedor','numvendedor','codigovendedor','codvendedor','vendedornr','nvendedor','nrvendedor','numvend','codvend','numerovendedor'],
-    comprador:        ['comprador','cliente','razaosocial','empresa','nomecomprador','comprador'],
+    comprador:        ['comprador','cliente','razaosocial','empresa','nomecomprador'],
     vendedor:         ['vendedor','representante','consultor','agente','responsavel','nomvendedor','nomevendedor'],
     estado:           ['estado','uf','estadocomprador','estadocliente'],
     cidade:           ['cidade','municipio','cidadecomprador','cidadecliente'],
     produto:          ['produto','produtos','servico','item','descricao','material'],
     frete:            ['frete','valorfrente','freight'],
-    lista_preco:      ['listapreco','listaprecos','preco','valor','total','valorvenda','preco','tabelapreco'],
-    quantidade_total: ['quantidadetotal','qtde','qtd','quantidade','total','qty'],
+    lista_preco:      ['listapreco','listaprecos','preco','valor','total','valorvenda','tabelapreco'],
+    quantidade_total: ['quantidadetotal','qtde','qtd','quantidade','qty'],
     data_cotacao:     ['data','datacotacao','datapedido','emissao','dataemissao'],
     status:           ['status','situacao','etapa','fase'],
     observacoes:      ['observacao','obs','nota','anotacao','comentario','observacoes'],
@@ -70,7 +68,6 @@ function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/)
   if (lines.length < 2) return { headers: [], rows: [] }
 
-  // Detectar delimitador (;, ,, tab, |)
   const firstLine = lines[0]
   const delimiter = [';', ',', '\t', '|'].reduce((best, d) =>
     firstLine.split(d).length > firstLine.split(best).length ? d : best, ';')
@@ -92,6 +89,28 @@ function parseCSV(text) {
   return { headers, rows }
 }
 
+function parseXLS(arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+  const sheetName = workbook.SheetNames[0]
+  const sheet = workbook.Sheets[sheetName]
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+
+  if (data.length < 2) return { headers: [], rows: [] }
+
+  const headers = data[0].map(h => String(h).trim())
+  const rows = data.slice(1)
+    .filter(r => r.some(cell => cell !== ''))
+    .map(r => headers.map((_, i) => {
+      const val = r[i]
+      if (val instanceof Date) {
+        return val.toISOString().split('T')[0]
+      }
+      return val === null || val === undefined ? '' : String(val).trim()
+    }))
+
+  return { headers, rows }
+}
+
 export default function ImportModal({ onFechar, onConcluida }) {
   const [etapa, setEtapa] = useState('upload')
   const [parsed, setParsed] = useState(null)
@@ -106,25 +125,40 @@ export default function ImportModal({ onFechar, onConcluida }) {
   const processarArquivo = (file) => {
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
-    if (!['csv', 'txt'].includes(ext)) {
-      setErro('Envie um arquivo .csv ou .txt')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const { headers, rows } = parseCSV(e.target.result)
-        if (!headers.length) { setErro('Arquivo vazio ou formato inválido'); return }
-        setParsed({ headers, rows, fileName: file.name })
-        setMapeamento(autoMapear(headers))
-        setEtapa('mapear')
-        setErro(null)
-      } catch (err) {
-        setErro('Erro ao processar: ' + err.message)
+
+    if (['xls', 'xlsx'].includes(ext)) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const { headers, rows } = parseXLS(new Uint8Array(e.target.result))
+          if (!headers.length) { setErro('Arquivo vazio ou formato inválido'); return }
+          setParsed({ headers, rows, fileName: file.name })
+          setMapeamento(autoMapear(headers))
+          setEtapa('mapear')
+          setErro(null)
+        } catch (err) {
+          setErro('Erro ao processar XLS: ' + err.message)
+        }
       }
+      reader.readAsArrayBuffer(file)
+    } else if (['csv', 'txt'].includes(ext)) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const { headers, rows } = parseCSV(e.target.result)
+          if (!headers.length) { setErro('Arquivo vazio ou formato inválido'); return }
+          setParsed({ headers, rows, fileName: file.name })
+          setMapeamento(autoMapear(headers))
+          setEtapa('mapear')
+          setErro(null)
+        } catch (err) {
+          setErro('Erro ao processar: ' + err.message)
+        }
+      }
+      reader.readAsText(file, 'UTF-8')
+    } else {
+      setErro('Formato não suportado. Envie um arquivo .xls, .xlsx, .csv ou .txt')
     }
-    // Tenta UTF-8; se tiver caracteres estranhos, reader.readAsText com latin1 também funciona
-    reader.readAsText(file, 'UTF-8')
   }
 
   const handleFile = (e) => processarArquivo(e.target.files[0])
@@ -132,12 +166,10 @@ export default function ImportModal({ onFechar, onConcluida }) {
 
   const handleConfirmarMapeamento = () => {
     const campos = Object.values(mapeamento)
-    // Precisa de pelo menos comprador ou cliente
     if (!campos.includes('comprador') && !campos.some(c => ['comprador','vendedor'].includes(c))) {
       setErro('O campo Comprador é obrigatório no mapeamento')
       return
     }
-    // Precisa de vendedor ou numero_vendedor
     if (!campos.includes('vendedor') && !campos.includes('numero_vendedor')) {
       setErro('Mapeie o campo Vendedor ou NºVendedor')
       return
@@ -160,7 +192,6 @@ export default function ImportModal({ onFechar, onConcluida }) {
       const cotacoes = parsed.rows.map(row => {
         const obj = {}
         parsed.headers.forEach((h, i) => { if (mapeamento[h]) obj[mapeamento[h]] = row[i] || '' })
-        // Se não tiver vendedor mas tiver numero_vendedor, usa como vendedor também
         if (!obj.vendedor && obj.numero_vendedor) obj.vendedor = obj.numero_vendedor
         return obj
       })
@@ -180,11 +211,6 @@ export default function ImportModal({ onFechar, onConcluida }) {
     }
   }
 
-  // Colunas da planilha já mapeadas (para evitar duplicatas no select)
-  const camposJaMapeados = Object.entries(mapeamento)
-    .filter(([, v]) => v)
-    .map(([, v]) => v)
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={e => e.target === e.currentTarget && onFechar()}>
@@ -195,7 +221,7 @@ export default function ImportModal({ onFechar, onConcluida }) {
           <div>
             <h2 className="text-lg font-bold text-gray-900">📂 Importar Planilha</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              {etapa === 'upload'    && 'Selecione seu arquivo CSV'}
+              {etapa === 'upload'    && 'Selecione seu arquivo XLS, XLSX ou CSV'}
               {etapa === 'mapear'   && `${parsed?.fileName} — ${parsed?.rows.length} linhas detectadas`}
               {etapa === 'preview'  && 'Confirme antes de importar'}
               {etapa === 'importando' && 'Importando...'}
@@ -244,10 +270,10 @@ export default function ImportModal({ onFechar, onConcluida }) {
               >
                 <p className="text-5xl mb-3">{arrastando ? '📥' : '📊'}</p>
                 <p className="font-semibold text-gray-700">
-                  {arrastando ? 'Solte aqui' : 'Clique ou arraste seu arquivo CSV'}
+                  {arrastando ? 'Solte aqui' : 'Clique ou arraste seu arquivo'}
                 </p>
-                <p className="text-sm text-gray-400 mt-1">Formato: .csv ou .txt separado por ; ou ,</p>
-                <input ref={inputRef} type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
+                <p className="text-sm text-gray-400 mt-1">Formatos aceitos: .xls, .xlsx, .csv, .txt</p>
+                <input ref={inputRef} type="file" accept=".xls,.xlsx,.csv,.txt" onChange={handleFile} className="hidden" />
               </div>
 
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-xs text-blue-700">
