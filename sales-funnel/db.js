@@ -12,11 +12,15 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS cotacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     numero TEXT,
-    cliente TEXT NOT NULL,
+    numero_vendedor TEXT,
+    comprador TEXT NOT NULL,
     vendedor TEXT NOT NULL,
+    estado TEXT,
+    cidade TEXT,
     produto TEXT,
-    valor REAL,
-    data_cotacao TEXT,
+    frete REAL,
+    lista_preco REAL,
+    quantidade_total INTEGER,
     status TEXT DEFAULT 'novo',
     observacoes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -42,5 +46,22 @@ db.exec(`
     FOREIGN KEY (cotacao_id) REFERENCES cotacoes(id) ON DELETE CASCADE
   );
 `)
+
+// Migração segura: adicionar colunas novas se o banco já existia
+const colunas = db.prepare("PRAGMA table_info(cotacoes)").all().map(c => c.name)
+const novasColunas = [
+  { nome: 'numero_vendedor', def: 'TEXT' },
+  { nome: 'comprador',       def: 'TEXT' },
+  { nome: 'estado',          def: 'TEXT' },
+  { nome: 'cidade',          def: 'TEXT' },
+  { nome: 'frete',           def: 'REAL' },
+  { nome: 'lista_preco',     def: 'REAL' },
+  { nome: 'quantidade_total',def: 'INTEGER' },
+]
+for (const col of novasColunas) {
+  if (!colunas.includes(col.nome)) {
+    db.exec(`ALTER TABLE cotacoes ADD COLUMN ${col.nome} ${col.def}`)
+  }
+}
 
 export default db

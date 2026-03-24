@@ -11,7 +11,6 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
-// Servir frontend em produção
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(join(__dirname, 'dist')))
 }
@@ -23,18 +22,11 @@ app.get('/api/cotacoes', (req, res) => {
   let query = 'SELECT * FROM cotacoes WHERE 1=1'
   const params = []
 
-  if (vendedor) {
-    query += ' AND vendedor = ?'
-    params.push(vendedor)
-  }
-  if (status) {
-    query += ' AND status = ?'
-    params.push(status)
-  }
+  if (vendedor) { query += ' AND vendedor = ?'; params.push(vendedor) }
+  if (status)   { query += ' AND status = ?';   params.push(status)   }
 
   query += ' ORDER BY updated_at DESC'
-  const cotacoes = db.prepare(query).all(...params)
-  res.json(cotacoes)
+  res.json(db.prepare(query).all(...params))
 })
 
 app.get('/api/cotacoes/:id', (req, res) => {
@@ -53,30 +45,41 @@ app.get('/api/cotacoes/:id', (req, res) => {
 })
 
 app.post('/api/cotacoes', (req, res) => {
-  const { numero, cliente, vendedor, produto, valor, data_cotacao, observacoes } = req.body
+  const {
+    numero, numero_vendedor, comprador, vendedor,
+    estado, cidade, produto, frete, lista_preco, quantidade_total,
+    data_cotacao, observacoes
+  } = req.body
+
+  const cliente = comprador || req.body.cliente
   if (!cliente || !vendedor) {
-    return res.status(400).json({ error: 'cliente e vendedor são obrigatórios' })
+    return res.status(400).json({ error: 'comprador e vendedor são obrigatórios' })
   }
 
-  const stmt = db.prepare(`
-    INSERT INTO cotacoes (numero, cliente, vendedor, produto, valor, data_cotacao, observacoes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `)
-  const result = stmt.run(numero, cliente, vendedor, produto, valor, data_cotacao, observacoes)
-  const nova = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(result.lastInsertRowid)
-  res.status(201).json(nova)
+  const result = db.prepare(`
+    INSERT INTO cotacoes
+      (numero, numero_vendedor, comprador, vendedor, estado, cidade,
+       produto, frete, lista_preco, quantidade_total, data_cotacao, observacoes)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    numero, numero_vendedor, cliente, vendedor,
+    estado, cidade, produto,
+    parseFloat(frete) || null,
+    parseFloat(lista_preco) || null,
+    parseInt(quantidade_total) || null,
+    data_cotacao, observacoes
+  )
+
+  res.status(201).json(db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(result.lastInsertRowid))
 })
 
 app.put('/api/cotacoes/:id/status', (req, res) => {
   const { status } = req.body
   const validos = ['novo', 'contato', 'proposta', 'negociacao', 'ganho', 'perdido']
-  if (!validos.includes(status)) {
-    return res.status(400).json({ error: 'Status inválido' })
-  }
+  if (!validos.includes(status)) return res.status(400).json({ error: 'Status inválido' })
 
-  db.prepare(`
-    UPDATE cotacoes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).run(status, req.params.id)
+  db.prepare('UPDATE cotacoes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(status, req.params.id)
 
   const atualizada = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(req.params.id)
   if (!atualizada) return res.status(404).json({ error: 'Cotação não encontrada' })
@@ -84,14 +87,30 @@ app.put('/api/cotacoes/:id/status', (req, res) => {
 })
 
 app.put('/api/cotacoes/:id', (req, res) => {
-  const { numero, cliente, vendedor, produto, valor, data_cotacao, observacoes } = req.body
+  const {
+    numero, numero_vendedor, comprador, vendedor,
+    estado, cidade, produto, frete, lista_preco, quantidade_total,
+    data_cotacao, observacoes
+  } = req.body
+
+  const cliente = comprador || req.body.cliente
 
   db.prepare(`
     UPDATE cotacoes
-    SET numero = ?, cliente = ?, vendedor = ?, produto = ?, valor = ?,
-        data_cotacao = ?, observacoes = ?, updated_at = CURRENT_TIMESTAMP
+    SET numero = ?, numero_vendedor = ?, comprador = ?, vendedor = ?,
+        estado = ?, cidade = ?, produto = ?, frete = ?, lista_preco = ?,
+        quantidade_total = ?, data_cotacao = ?, observacoes = ?,
+        updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(numero, cliente, vendedor, produto, valor, data_cotacao, observacoes, req.params.id)
+  `).run(
+    numero, numero_vendedor, cliente, vendedor,
+    estado, cidade, produto,
+    parseFloat(frete) || null,
+    parseFloat(lista_preco) || null,
+    parseInt(quantidade_total) || null,
+    data_cotacao, observacoes,
+    req.params.id
+  )
 
   const atualizada = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(req.params.id)
   if (!atualizada) return res.status(404).json({ error: 'Cotação não encontrada' })
@@ -106,6 +125,19 @@ app.delete('/api/cotacoes/:id', (req, res) => {
 
 // ─── IMPORTAÇÃO ─────────────────────────────────────────────────────────────
 
+// Normaliza status vindos da planilha para os stages do funil
+function normalizarStatus(raw) {
+  if (!raw) return 'novo'
+  const s = raw.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
+  if (['novo', 'new', 'aberto', 'criado', 'pendente'].some(x => s.includes(x))) return 'novo'
+  if (['contato', 'primeiro', 'ligacao', 'ligou', 'contactado'].some(x => s.includes(x))) return 'contato'
+  if (['proposta', 'orcamento', 'enviado', 'cotacao enviada'].some(x => s.includes(x))) return 'proposta'
+  if (['negociacao', 'negociando', 'tratativa', 'andamento'].some(x => s.includes(x))) return 'negociacao'
+  if (['aprovado', 'ganho', 'fechado', 'won', 'vendido', 'confirmado'].some(x => s.includes(x))) return 'ganho'
+  if (['reprovado', 'perdido', 'cancelado', 'lost', 'recusado', 'sem retorno'].some(x => s.includes(x))) return 'perdido'
+  return 'novo'
+}
+
 app.post('/api/cotacoes/importar', (req, res) => {
   const { cotacoes } = req.body
   if (!Array.isArray(cotacoes) || cotacoes.length === 0) {
@@ -113,31 +145,40 @@ app.post('/api/cotacoes/importar', (req, res) => {
   }
 
   const stmt = db.prepare(`
-    INSERT INTO cotacoes (numero, cliente, vendedor, produto, valor, data_cotacao, observacoes, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO cotacoes
+      (numero, numero_vendedor, comprador, vendedor, estado, cidade,
+       produto, frete, lista_preco, quantidade_total, data_cotacao, observacoes, status)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
   `)
 
   const inserir = db.transaction((items) => {
     let count = 0
     for (const c of items) {
-      if (!c.cliente || !c.vendedor) continue
+      const cliente = c.comprador || c.cliente
+      const vendedor = c.vendedor || c.numero_vendedor
+      if (!cliente || !vendedor) continue
+
       stmt.run(
         c.numero || null,
-        c.cliente,
-        c.vendedor,
+        c.numero_vendedor || null,
+        cliente,
+        vendedor,
+        c.estado || null,
+        c.cidade || null,
         c.produto || null,
-        parseFloat(c.valor) || null,
-        c.data_cotacao || null,
+        parseFloat(String(c.frete || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
+        parseFloat(String(c.lista_preco || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
+        parseInt(c.quantidade_total) || null,
+        c.data_cotacao || c.data || null,
         c.observacoes || null,
-        c.status || 'novo'
+        normalizarStatus(c.status)
       )
       count++
     }
     return count
   })
 
-  const count = inserir(cotacoes)
-  res.json({ importadas: count })
+  res.json({ importadas: inserir(cotacoes) })
 })
 
 // ─── FOLLOW-UPS ─────────────────────────────────────────────────────────────
@@ -153,33 +194,25 @@ app.post('/api/cotacoes/:id/followups', (req, res) => {
     VALUES (?, ?, ?, ?, ?)
   `).run(req.params.id, tipo, descricao, resultado || null, vendedor)
 
-  // Atualizar updated_at da cotação
   db.prepare('UPDATE cotacoes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id)
-
-  const followup = db.prepare('SELECT * FROM followups WHERE id = ?').get(result.lastInsertRowid)
-  res.status(201).json(followup)
+  res.status(201).json(db.prepare('SELECT * FROM followups WHERE id = ?').get(result.lastInsertRowid))
 })
 
 // ─── RESPOSTAS DO CLIENTE ───────────────────────────────────────────────────
 
 app.post('/api/cotacoes/:id/respostas', (req, res) => {
   const { resposta } = req.body
-  if (!resposta) {
-    return res.status(400).json({ error: 'resposta é obrigatória' })
-  }
+  if (!resposta) return res.status(400).json({ error: 'resposta é obrigatória' })
 
   const result = db.prepare(`
-    INSERT INTO respostas_cliente (cotacao_id, resposta)
-    VALUES (?, ?)
+    INSERT INTO respostas_cliente (cotacao_id, resposta) VALUES (?, ?)
   `).run(req.params.id, resposta)
 
   db.prepare('UPDATE cotacoes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id)
-
-  const nova = db.prepare('SELECT * FROM respostas_cliente WHERE id = ?').get(result.lastInsertRowid)
-  res.status(201).json(nova)
+  res.status(201).json(db.prepare('SELECT * FROM respostas_cliente WHERE id = ?').get(result.lastInsertRowid))
 })
 
-// ─── VENDEDORES (lista única) ─────────────────────────────────────────────
+// ─── VENDEDORES ──────────────────────────────────────────────────────────────
 
 app.get('/api/vendedores', (_req, res) => {
   const rows = db.prepare('SELECT DISTINCT vendedor FROM cotacoes ORDER BY vendedor').all()
@@ -189,11 +222,7 @@ app.get('/api/vendedores', (_req, res) => {
 // ─── Fallback SPA ────────────────────────────────────────────────────────────
 
 if (process.env.NODE_ENV === 'production') {
-  app.get('*', (_req, res) => {
-    res.sendFile(join(__dirname, 'dist', 'index.html'))
-  })
+  app.get('*', (_req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')))
 }
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`)
-})
+app.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`))

@@ -4,10 +4,15 @@ import { API } from '../constants.js'
 export default function NovaCotacaoModal({ onFechar, onCriada }) {
   const [form, setForm] = useState({
     numero: '',
-    cliente: '',
+    numero_vendedor: '',
+    comprador: '',
     vendedor: '',
+    estado: '',
+    cidade: '',
     produto: '',
-    valor: '',
+    frete: '',
+    lista_preco: '',
+    quantidade_total: '',
     data_cotacao: new Date().toISOString().split('T')[0],
     observacoes: '',
   })
@@ -23,7 +28,14 @@ export default function NovaCotacaoModal({ onFechar, onCriada }) {
       const res = await fetch(`${API}/cotacoes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, valor: parseFloat(form.valor) || null }),
+        body: JSON.stringify({
+          ...form,
+          lista_preco: parseFloat(form.lista_preco) || null,
+          frete: parseFloat(form.frete) || null,
+          quantidade_total: parseInt(form.quantidade_total) || null,
+          // vendedor fallback para numero_vendedor
+          vendedor: form.vendedor || form.numero_vendedor,
+        }),
       })
       if (!res.ok) throw new Error('Erro ao criar cotação')
       onCriada()
@@ -35,14 +47,15 @@ export default function NovaCotacaoModal({ onFechar, onCriada }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onFechar()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onFechar()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Nova Cotação</h2>
+          <h2 className="text-lg font-bold text-gray-900">+ Nova Cotação</h2>
           <button onClick={onFechar} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto scrollbar-thin">
           {erro && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">⚠️ {erro}</div>
           )}
@@ -61,32 +74,64 @@ export default function NovaCotacaoModal({ onFechar, onCriada }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente <span className="text-red-500">*</span></label>
-            <input value={form.cliente} onChange={set('cliente')} required placeholder="Nome do cliente ou empresa"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Comprador / Cliente <span className="text-red-500">*</span></label>
+            <input value={form.comprador} onChange={set('comprador')} required placeholder="Nome ou razão social"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor <span className="text-red-500">*</span></label>
-            <input value={form.vendedor} onChange={set('vendedor')} required placeholder="Nome do vendedor responsável"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">NºVendedor <span className="text-red-500">*</span></label>
+              <input value={form.numero_vendedor} onChange={set('numero_vendedor')} required placeholder="Código"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome Vendedor</label>
+              <input value={form.vendedor} onChange={set('vendedor')} placeholder="Opcional"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <input value={form.estado} onChange={set('estado')} placeholder="SP"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+              <input value={form.cidade} onChange={set('cidade')} placeholder="São Paulo"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Produto / Serviço</label>
-            <input value={form.produto} onChange={set('produto')} placeholder="Descrição do produto ou serviço"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Produtos</label>
+            <input value={form.produto} onChange={set('produto')} placeholder="Descrição dos produtos"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-            <input type="number" step="0.01" value={form.valor} onChange={set('valor')} placeholder="0,00"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Lista de Preço</label>
+              <input type="number" step="0.01" value={form.lista_preco} onChange={set('lista_preco')} placeholder="0,00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Frete</label>
+              <input type="number" step="0.01" value={form.frete} onChange={set('frete')} placeholder="0,00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Qtde Total</label>
+              <input type="number" value={form.quantidade_total} onChange={set('quantidade_total')} placeholder="0"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-            <textarea value={form.observacoes} onChange={set('observacoes')} rows={2} placeholder="Informações adicionais..."
+            <textarea value={form.observacoes} onChange={set('observacoes')} rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" />
           </div>
 
