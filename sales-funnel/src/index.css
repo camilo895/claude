@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E1 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 2px; }
+}
+
+.drag-over {
+  background-color: rgba(59, 130, 246, 0.05) !important;
+  border: 2px dashed #3B82F6 !important;
+}
+
+.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
