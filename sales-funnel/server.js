@@ -48,7 +48,7 @@ app.post('/api/cotacoes', (req, res) => {
   const {
     numero, numero_vendedor, comprador, vendedor,
     estado, cidade, produto, frete, lista_preco, quantidade_total,
-    data_cotacao, observacoes
+    valor_total, data_cotacao, observacoes
   } = req.body
 
   const cliente = comprador || req.body.cliente
@@ -59,14 +59,15 @@ app.post('/api/cotacoes', (req, res) => {
   const result = db.prepare(`
     INSERT INTO cotacoes
       (numero, numero_vendedor, comprador, vendedor, estado, cidade,
-       produto, frete, lista_preco, quantidade_total, data_cotacao, observacoes)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     numero, numero_vendedor, cliente, vendedor,
     estado, cidade, produto,
     parseFloat(frete) || null,
     parseFloat(lista_preco) || null,
     parseInt(quantidade_total) || null,
+    parseFloat(valor_total) || null,
     data_cotacao, observacoes
   )
 
@@ -90,7 +91,7 @@ app.put('/api/cotacoes/:id', (req, res) => {
   const {
     numero, numero_vendedor, comprador, vendedor,
     estado, cidade, produto, frete, lista_preco, quantidade_total,
-    data_cotacao, observacoes
+    valor_total, data_cotacao, observacoes
   } = req.body
 
   const cliente = comprador || req.body.cliente
@@ -99,7 +100,7 @@ app.put('/api/cotacoes/:id', (req, res) => {
     UPDATE cotacoes
     SET numero = ?, numero_vendedor = ?, comprador = ?, vendedor = ?,
         estado = ?, cidade = ?, produto = ?, frete = ?, lista_preco = ?,
-        quantidade_total = ?, data_cotacao = ?, observacoes = ?,
+        quantidade_total = ?, valor_total = ?, data_cotacao = ?, observacoes = ?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
@@ -108,6 +109,7 @@ app.put('/api/cotacoes/:id', (req, res) => {
     parseFloat(frete) || null,
     parseFloat(lista_preco) || null,
     parseInt(quantidade_total) || null,
+    parseFloat(valor_total) || null,
     data_cotacao, observacoes,
     req.params.id
   )
@@ -125,7 +127,6 @@ app.delete('/api/cotacoes/:id', (req, res) => {
 
 // ─── IMPORTAÇÃO ─────────────────────────────────────────────────────────────
 
-// Normaliza status vindos da planilha para os stages do funil
 function normalizarStatus(raw) {
   if (!raw) return 'novo'
   const s = raw.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
@@ -147,8 +148,8 @@ app.post('/api/cotacoes/importar', (req, res) => {
   const stmt = db.prepare(`
     INSERT INTO cotacoes
       (numero, numero_vendedor, comprador, vendedor, estado, cidade,
-       produto, frete, lista_preco, quantidade_total, data_cotacao, observacoes, status)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+       produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes, status)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `)
 
   const inserir = db.transaction((items) => {
@@ -169,6 +170,7 @@ app.post('/api/cotacoes/importar', (req, res) => {
         parseFloat(String(c.frete || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
         parseFloat(String(c.lista_preco || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
         parseInt(c.quantidade_total) || null,
+        parseFloat(String(c.valor_total || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
         c.data_cotacao || c.data || null,
         c.observacoes || null,
         normalizarStatus(c.status)

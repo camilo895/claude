@@ -5,7 +5,7 @@ import { API } from '../constants.js'
 const COLUNAS_ESPERADAS = [
   'numero', 'numero_vendedor', 'comprador', 'vendedor',
   'estado', 'cidade', 'produto', 'frete', 'lista_preco',
-  'quantidade_total', 'data_cotacao', 'status', 'observacoes'
+  'quantidade_total', 'valor_total', 'data_cotacao', 'status', 'observacoes'
 ]
 
 const COLUNAS_LABEL = {
@@ -19,6 +19,7 @@ const COLUNAS_LABEL = {
   frete:            'Frete',
   lista_preco:      'Lista de Preço',
   quantidade_total: 'Quantidade Total',
+  valor_total:      'Valor Total',
   data_cotacao:     'Data',
   status:           'Status',
   observacoes:      'Observações',
@@ -39,9 +40,10 @@ function autoMapear(headers) {
     estado:           ['estado','uf','estadocomprador','estadocliente'],
     cidade:           ['cidade','municipio','cidadecomprador','cidadecliente'],
     produto:          ['produto','produtos','servico','item','descricao','material'],
-    frete:            ['frete','valorfrente','freight'],
-    lista_preco:      ['listapreco','listaprecos','preco','valor','total','valorvenda','tabelapreco'],
+    frete:            ['frete','freight'],
+    lista_preco:      ['listapreco','listaprecos','tabelapreco'],
     quantidade_total: ['quantidadetotal','qtde','qtd','quantidade','qty'],
+    valor_total:      ['total','valortotal','valorpedido','valorvenda','valor','vlrtotal','vltotal'],
     data_cotacao:     ['data','datacotacao','datapedido','emissao','dataemissao'],
     status:           ['status','situacao','etapa','fase'],
     observacoes:      ['observacao','obs','nota','anotacao','comentario','observacoes'],
@@ -288,6 +290,7 @@ export default function ImportModal({ onFechar, onConcluida }) {
                     ['Produtos', 'produto'],
                     ['Frete', 'frete'],
                     ['Lista de preço', 'lista_preco'],
+                    ['Total / Valor Total', 'valor_total'],
                     ['Status', 'status (auto-convertido)'],
                     ['QuantidadeTotal', 'quantidade_total'],
                   ].map(([col, campo]) => (

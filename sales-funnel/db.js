@@ -21,6 +21,7 @@ db.exec(`
     frete REAL,
     lista_preco REAL,
     quantidade_total INTEGER,
+    valor_total REAL,
     status TEXT DEFAULT 'novo',
     observacoes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -57,6 +58,7 @@ const novasColunas = [
   { nome: 'frete',           def: 'REAL' },
   { nome: 'lista_preco',     def: 'REAL' },
   { nome: 'quantidade_total',def: 'INTEGER' },
+  { nome: 'valor_total',     def: 'REAL' },
 ]
 for (const col of novasColunas) {
   if (!colunas.includes(col.nome)) {
