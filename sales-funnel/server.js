@@ -29,6 +29,105 @@ app.get('/api/cotacoes', (req, res) => {
   res.json(db.prepare(query).all(...params))
 })
 
+app.post('/api/cotacoes', (req, res) => {
+  const {
+    numero, numero_vendedor, comprador, vendedor,
+    estado, cidade, produto, frete, lista_preco, quantidade_total,
+    valor_total, data_cotacao, observacoes
+  } = req.body
+
+  const cliente = comprador || req.body.cliente
+  if (!cliente || !vendedor) {
+    return res.status(400).json({ error: 'comprador e vendedor são obrigatórios' })
+  }
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO cotacoes
+        (numero, numero_vendedor, comprador, vendedor, estado, cidade,
+         produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      numero, numero_vendedor, cliente, vendedor,
+      estado, cidade, produto,
+      parseFloat(frete) || null,
+      parseFloat(lista_preco) || null,
+      parseInt(quantidade_total) || null,
+      parseFloat(valor_total) || null,
+      data_cotacao, observacoes
+    )
+    res.status(201).json(db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(result.lastInsertRowid))
+  } catch (err) {
+    console.error('Erro ao criar cotação:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── IMPORTAÇÃO (antes das rotas com :id) ───────────────────────────────────
+
+function normalizarStatus(raw) {
+  if (!raw) return 'novo'
+  const s = raw.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
+  if (['novo', 'new', 'aberto', 'criado', 'pendente'].some(x => s.includes(x))) return 'novo'
+  if (['contato', 'primeiro', 'ligacao', 'ligou', 'contactado'].some(x => s.includes(x))) return 'contato'
+  if (['proposta', 'orcamento', 'enviado', 'cotacao enviada'].some(x => s.includes(x))) return 'proposta'
+  if (['negociacao', 'negociando', 'tratativa', 'andamento'].some(x => s.includes(x))) return 'negociacao'
+  if (['aprovado', 'ganho', 'fechado', 'won', 'vendido', 'confirmado'].some(x => s.includes(x))) return 'ganho'
+  if (['reprovado', 'perdido', 'cancelado', 'lost', 'recusado', 'sem retorno'].some(x => s.includes(x))) return 'perdido'
+  return 'novo'
+}
+
+app.post('/api/cotacoes/importar', (req, res) => {
+  const { cotacoes } = req.body
+  if (!Array.isArray(cotacoes) || cotacoes.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma cotação para importar' })
+  }
+
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO cotacoes
+        (numero, numero_vendedor, comprador, vendedor, estado, cidade,
+         produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `)
+
+    const inserir = db.transaction((items) => {
+      let count = 0
+      for (const c of items) {
+        const cliente = c.comprador || c.cliente
+        const vendedor = c.vendedor || c.numero_vendedor
+        if (!cliente || !vendedor) continue
+
+        stmt.run(
+          c.numero || null,
+          c.numero_vendedor || null,
+          cliente,
+          vendedor,
+          c.estado || null,
+          c.cidade || null,
+          c.produto || null,
+          parseFloat(String(c.frete || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
+          parseFloat(String(c.lista_preco || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
+          parseInt(c.quantidade_total) || null,
+          parseFloat(String(c.valor_total || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
+          c.data_cotacao || c.data || null,
+          c.observacoes || null,
+          normalizarStatus(c.status)
+        )
+        count++
+      }
+      return count
+    })
+
+    res.json({ importadas: inserir(cotacoes) })
+  } catch (err) {
+    console.error('Erro ao importar:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── COTAÇÕES por ID ──────────────────────────────────────────────────────
+
 app.get('/api/cotacoes/:id', (req, res) => {
   const cotacao = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(req.params.id)
   if (!cotacao) return res.status(404).json({ error: 'Cotação não encontrada' })
@@ -42,36 +141,6 @@ app.get('/api/cotacoes/:id', (req, res) => {
     .all(req.params.id)
 
   res.json({ ...cotacao, followups, respostas })
-})
-
-app.post('/api/cotacoes', (req, res) => {
-  const {
-    numero, numero_vendedor, comprador, vendedor,
-    estado, cidade, produto, frete, lista_preco, quantidade_total,
-    valor_total, data_cotacao, observacoes
-  } = req.body
-
-  const cliente = comprador || req.body.cliente
-  if (!cliente || !vendedor) {
-    return res.status(400).json({ error: 'comprador e vendedor são obrigatórios' })
-  }
-
-  const result = db.prepare(`
-    INSERT INTO cotacoes
-      (numero, numero_vendedor, comprador, vendedor, estado, cidade,
-       produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `).run(
-    numero, numero_vendedor, cliente, vendedor,
-    estado, cidade, produto,
-    parseFloat(frete) || null,
-    parseFloat(lista_preco) || null,
-    parseInt(quantidade_total) || null,
-    parseFloat(valor_total) || null,
-    data_cotacao, observacoes
-  )
-
-  res.status(201).json(db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(result.lastInsertRowid))
 })
 
 app.put('/api/cotacoes/:id/status', (req, res) => {
@@ -96,91 +165,38 @@ app.put('/api/cotacoes/:id', (req, res) => {
 
   const cliente = comprador || req.body.cliente
 
-  db.prepare(`
-    UPDATE cotacoes
-    SET numero = ?, numero_vendedor = ?, comprador = ?, vendedor = ?,
-        estado = ?, cidade = ?, produto = ?, frete = ?, lista_preco = ?,
-        quantidade_total = ?, valor_total = ?, data_cotacao = ?, observacoes = ?,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    numero, numero_vendedor, cliente, vendedor,
-    estado, cidade, produto,
-    parseFloat(frete) || null,
-    parseFloat(lista_preco) || null,
-    parseInt(quantidade_total) || null,
-    parseFloat(valor_total) || null,
-    data_cotacao, observacoes,
-    req.params.id
-  )
+  try {
+    db.prepare(`
+      UPDATE cotacoes
+      SET numero = ?, numero_vendedor = ?, comprador = ?, vendedor = ?,
+          estado = ?, cidade = ?, produto = ?, frete = ?, lista_preco = ?,
+          quantidade_total = ?, valor_total = ?, data_cotacao = ?, observacoes = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      numero, numero_vendedor, cliente, vendedor,
+      estado, cidade, produto,
+      parseFloat(frete) || null,
+      parseFloat(lista_preco) || null,
+      parseInt(quantidade_total) || null,
+      parseFloat(valor_total) || null,
+      data_cotacao, observacoes,
+      req.params.id
+    )
 
-  const atualizada = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(req.params.id)
-  if (!atualizada) return res.status(404).json({ error: 'Cotação não encontrada' })
-  res.json(atualizada)
+    const atualizada = db.prepare('SELECT * FROM cotacoes WHERE id = ?').get(req.params.id)
+    if (!atualizada) return res.status(404).json({ error: 'Cotação não encontrada' })
+    res.json(atualizada)
+  } catch (err) {
+    console.error('Erro ao atualizar cotação:', err)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.delete('/api/cotacoes/:id', (req, res) => {
   const result = db.prepare('DELETE FROM cotacoes WHERE id = ?').run(req.params.id)
   if (result.changes === 0) return res.status(404).json({ error: 'Cotação não encontrada' })
   res.json({ ok: true })
-})
-
-// ─── IMPORTAÇÃO ─────────────────────────────────────────────────────────────
-
-function normalizarStatus(raw) {
-  if (!raw) return 'novo'
-  const s = raw.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
-  if (['novo', 'new', 'aberto', 'criado', 'pendente'].some(x => s.includes(x))) return 'novo'
-  if (['contato', 'primeiro', 'ligacao', 'ligou', 'contactado'].some(x => s.includes(x))) return 'contato'
-  if (['proposta', 'orcamento', 'enviado', 'cotacao enviada'].some(x => s.includes(x))) return 'proposta'
-  if (['negociacao', 'negociando', 'tratativa', 'andamento'].some(x => s.includes(x))) return 'negociacao'
-  if (['aprovado', 'ganho', 'fechado', 'won', 'vendido', 'confirmado'].some(x => s.includes(x))) return 'ganho'
-  if (['reprovado', 'perdido', 'cancelado', 'lost', 'recusado', 'sem retorno'].some(x => s.includes(x))) return 'perdido'
-  return 'novo'
-}
-
-app.post('/api/cotacoes/importar', (req, res) => {
-  const { cotacoes } = req.body
-  if (!Array.isArray(cotacoes) || cotacoes.length === 0) {
-    return res.status(400).json({ error: 'Nenhuma cotação para importar' })
-  }
-
-  const stmt = db.prepare(`
-    INSERT INTO cotacoes
-      (numero, numero_vendedor, comprador, vendedor, estado, cidade,
-       produto, frete, lista_preco, quantidade_total, valor_total, data_cotacao, observacoes, status)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `)
-
-  const inserir = db.transaction((items) => {
-    let count = 0
-    for (const c of items) {
-      const cliente = c.comprador || c.cliente
-      const vendedor = c.vendedor || c.numero_vendedor
-      if (!cliente || !vendedor) continue
-
-      stmt.run(
-        c.numero || null,
-        c.numero_vendedor || null,
-        cliente,
-        vendedor,
-        c.estado || null,
-        c.cidade || null,
-        c.produto || null,
-        parseFloat(String(c.frete || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
-        parseFloat(String(c.lista_preco || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
-        parseInt(c.quantidade_total) || null,
-        parseFloat(String(c.valor_total || '').replace(/[^\d.,]/g, '').replace(',', '.')) || null,
-        c.data_cotacao || c.data || null,
-        c.observacoes || null,
-        normalizarStatus(c.status)
-      )
-      count++
-    }
-    return count
-  })
-
-  res.json({ importadas: inserir(cotacoes) })
 })
 
 // ─── FOLLOW-UPS ─────────────────────────────────────────────────────────────
