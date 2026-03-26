@@ -10,6 +10,7 @@ export default function QuoteCard({ cotacao, stageColor, onClick, onDragStart, o
 
   const nome = cotacao.comprador || cotacao.cliente || '—'
   const local = [cotacao.cidade, cotacao.estado].filter(Boolean).join(' / ')
+  const valor = cotacao.valor_total || cotacao.lista_preco || cotacao.valor
 
   return (
     <div
@@ -47,9 +48,9 @@ export default function QuoteCard({ cotacao, stageColor, onClick, onDragStart, o
       )}
 
       {/* Valor */}
-      {(cotacao.lista_preco || cotacao.valor) && (
+      {valor && (
         <p className="text-sm font-bold mb-2" style={{ color: stageColor }}>
-          {formatCurrency(cotacao.lista_preco || cotacao.valor)}
+          {formatCurrency(valor)}
         </p>
       )}
 
