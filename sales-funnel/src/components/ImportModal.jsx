@@ -203,7 +203,10 @@ export default function ImportModal({ onFechar, onConcluida }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cotacoes }),
       })
-      if (!res.ok) throw new Error('Erro ao importar')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Erro ${res.status} ao importar`)
+      }
       setResultado(await res.json())
     } catch (e) {
       setErro(e.message)
