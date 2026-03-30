@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
+  Home,
   Search,
   FileText,
   LayoutDashboard,
@@ -16,6 +17,7 @@ import {
 import { useState } from "react";
 
 const navigation = [
+  { name: "Dashboard", href: "/", icon: Home },
   { name: "Tabela de Preços", href: "/precos", icon: Search },
   { name: "Cotações", href: "/cotacoes", icon: FileText },
   { name: "CRM", href: "/crm", icon: LayoutDashboard },
@@ -39,7 +41,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 px-2 py-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}

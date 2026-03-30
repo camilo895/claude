@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CRM Mancal
 
-## Getting Started
+Sistema de Gestão Comercial para distribuição de mancais e rolamentos.
 
-First, run the development server:
+## Módulos
+
+| Módulo | Descrição |
+|--------|-----------|
+| **Tabela de Preços** | Consulta com simulação de margem por região (SP, Sul/Sudeste, N/NE/CO/ES) |
+| **Cotações** | Criação, PDF profissional, envio via WhatsApp |
+| **CRM** | Pipeline Kanban, follow-ups automáticos, registro de atividades |
+| **Performance** | Meta mensal, cotações/dia, taxa de conversão, projeção |
+| **Configurações** | Upload de planilha, parametrização de follow-up, metas, equipe |
+
+## Stack
+
+- **Frontend:** Next.js 16 + TypeScript + Tailwind CSS
+- **Backend:** Next.js API Routes
+- **Banco:** PostgreSQL + Prisma ORM
+- **Auth:** Google OAuth (NextAuth.js)
+- **PDF:** @react-pdf/renderer
+- **Deploy:** Vercel + Neon/Supabase
+
+## Setup Rápido
 
 ```bash
+# 1. Instalar dependências
+npm install
+
+# 2. Configurar variáveis de ambiente
+cp .env.example .env
+# Edite o .env com suas credenciais
+
+# 3. Iniciar PostgreSQL e criar banco
+# (se local) createdb crmmncal
+
+# 4. Rodar migrations
+npm run db:migrate
+
+# 5. Popular com dados de exemplo
+npm run db:seed
+
+# 6. Iniciar servidor
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Modo Desenvolvimento (sem Google OAuth)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Em desenvolvimento, um login simplificado está disponível na tela de login.
+Basta informar nome e email para entrar com acesso de Diretor.
 
-## Learn More
+## Deploy em Produção
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Banco de Dados (Neon - gratuito)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crie uma conta em [neon.tech](https://neon.tech)
+2. Crie um projeto e copie a connection string
+3. Rode: `DATABASE_URL="sua-url" npx prisma migrate deploy`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Google OAuth
 
-## Deploy on Vercel
+1. Acesse [console.cloud.google.com](https://console.cloud.google.com)
+2. Crie um OAuth Client ID (tipo: Web application)
+3. Authorized redirect URI: `https://seudominio.com/api/auth/callback/google`
+4. Copie Client ID e Client Secret para o `.env`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3. Vercel
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Conecte o repositório no [vercel.com](https://vercel.com)
+2. Configure as variáveis de ambiente (DATABASE_URL, GOOGLE_CLIENT_ID, etc.)
+3. Deploy automático
+
+## Comandos
+
+```bash
+npm run dev          # Servidor de desenvolvimento
+npm run build        # Build de produção
+npm run db:migrate   # Rodar migrations
+npm run db:seed      # Popular banco com dados de exemplo
+npm run db:studio    # Abrir Prisma Studio (visualizar dados)
+```
+
+## Estrutura de Preços
+
+Fórmula: `Preço = Custo × (1 + Margem%) × (1 + Fator Tributário Regional%)`
+
+| Região | Fator |
+|--------|-------|
+| São Paulo | 9,1204% |
+| Sul/Sudeste | 15,6990% |
+| N/NE/CO/ES | 12,9736% |
+
+## Roles
+
+| Perfil | Permissões |
+|--------|-----------|
+| Vendedor | Consultar preço, criar cotação, ver próprio CRM e meta |
+| Coordenador | + aprovar descontos, parametrizar follow-up, ver equipe |
+| Gerente | + relatórios de performance da equipe |
+| Diretor | Acesso total + configurações estratégicas |
