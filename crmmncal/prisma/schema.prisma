@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// AUTH - NextAuth.js
+// ==========================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// USUÁRIOS E PERMISSÕES
+// ==========================================
+
+enum UserRole {
+  VENDEDOR
+  COORDENADOR
+  GERENTE
+  DIRETOR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(VENDEDOR)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  // CRM
+  quotations    Quotation[]
+  followUps     FollowUp[]
+  activities    Activity[]
+
+  // Performance
+  salesGoals    SalesGoal[]
+
+  // Equipe (coordenador gerencia vendedores)
+  teamId        String?
+  team          Team?     @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeam   Team?     @relation("TeamManager")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  managerId String @unique
+  manager   User   @relation("TeamManager", fields: [managerId], references: [id])
+  members   User[] @relation("TeamMembers")
+
+  // Parametrização de follow-up
+  followUpConfig FollowUpConfig?
+}
+
+// ==========================================
+// TABELA DE PREÇOS - PRODUTOS
+// ==========================================
+
+model Product {
+  id          String  @id @default(cuid())
+  code        String  @unique // Ex: SGGP 1127, SGOP 3100
+  description String?
+  reference   String? // Referência cruzada (ex: 270X1.3/4" Duocone)
+  model       String?
+  weight      Float?
+  brand       String? // SKF, FAG, NSK, TIMKEN...
+  series      String? // 1127, 3000, 3100...
+  category    String? // Tipo do mancal
+
+  // Preços
+  costPrice   Float   // Preço de custo
+  marginDefault Float @default(20) // Margem padrão (%)
+
+  // Fatores tributários por região
+  taxSP           Float @default(9.1204)   // São Paulo
+  taxSulSudeste   Float @default(15.6990)  // Sul/Sudeste
+  taxNNECOES      Float @default(12.9736)  // N/NE/CO/ES
+
+  // Estoque
+  stockQuantity Int @default(0)
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotationItems QuotationItem[]
+}
+
+// ==========================================
+// CLIENTES
+// ==========================================
+
+model Customer {
+  id        String  @id @default(cuid())
+  name      String
+  cnpj      String? @unique
+  cpf       String? @unique
+  email     String?
+  phone     String? // WhatsApp
+  state     String  // UF - determina região tributária
+  city      String?
+  address   String?
+  notes     String?
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotations Quotation[]
+}
+
+// ==========================================
+// COTAÇÕES
+// ==========================================
+
+enum QuotationStatus {
+  RASCUNHO
+  ENVIADA
+  EM_FOLLOWUP
+  EM_NEGOCIACAO
+  GANHA
+  PERDIDA
+}
+
+enum MarketType {
+  INTERNO
+  EXPORTACAO
+}
+
+model Quotation {
+  id            String          @id @default(cuid())
+  number        Int             @unique @default(autoincrement())
+  status        QuotationStatus @default(RASCUNHO)
+  marketType    MarketType      @default(INTERNO)
+  validUntil    DateTime?
+  notes         String?
+  lostReason    String?
+
+  // Totais
+  totalCost     Float @default(0)
+  totalPrice    Float @default(0)
+  marginAvg     Float @default(0)
+
+  // Relacionamentos
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  sellerId      String
+  seller        User     @relation(fields: [sellerId], references: [id])
+
+  items         QuotationItem[]
+  followUps     FollowUp[]
+  activities    Activity[]
+
+  sentAt        DateTime?
+  wonAt         DateTime?
+  lostAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model QuotationItem {
+  id          String @id @default(cuid())
+  quantity    Int    @default(1)
+  unitCost    Float  // Custo unitário no momento da cotação
+  margin      Float  // Margem aplicada (%)
+  taxRate     Float  // Fator tributário aplicado (%)
+  unitPrice   Float  // Preço unitário final
+  totalPrice  Float  // unitPrice * quantity
+
+  // Fator de conversão (exportação)
+  conversionFactor Float @default(100)
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+}
+
+// ==========================================
+// CRM - FOLLOW-UP E ATIVIDADES
+// ==========================================
+
+enum FollowUpStatus {
+  PENDENTE
+  REALIZADO
+  ATRASADO
+  CANCELADO
+}
+
+model FollowUp {
+  id          String         @id @default(cuid())
+  dueDate     DateTime
+  status      FollowUpStatus @default(PENDENTE)
+  notes       String?
+  completedAt DateTime?
+
+  // Google Calendar
+  calendarEventId String?
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  type        String   // LIGACAO, EMAIL, WHATSAPP, REUNIAO, NOTA
+  description String
+  createdAt   DateTime @default(now())
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+// Configuração de follow-up por equipe (coordenador define)
+model FollowUpConfig {
+  id                  String @id @default(cuid())
+  teamId              String @unique
+  team                Team   @relation(fields: [teamId], references: [id])
+
+  // Dias após cotação enviada para cada follow-up
+  firstFollowUpDays   Int @default(2)
+  secondFollowUpDays  Int @default(5)
+  thirdFollowUpDays   Int @default(10)
+  maxFollowUps        Int @default(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// PERFORMANCE E METAS
+// ==========================================
+
+model SalesGoal {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  month           Int      // 1-12
+  year            Int
+  targetAmount    Float    // Meta de venda (R$)
+  achievedAmount  Float    @default(0)
+
+  // Calculados
+  conversionRate  Float    @default(10) // Taxa de conversão (%)
+  avgTicket       Float    @default(0)  // Ticket médio
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month, year])
+}

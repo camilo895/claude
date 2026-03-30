@@ -20,3 +20,8 @@ uploads/
 dist/
 build/
 .cache/
+crmmncal/node_modules/
+crmmncal/.next/
+crmmncal/.env
+crmmncal/src/generated/
+.next/
