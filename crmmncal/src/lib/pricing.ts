@@ -21,12 +21,15 @@ export function calculatePrice(
 ): PriceResult {
   const { costPrice, margin, conversionFactor = 100 } = input;
 
-  const taxRate =
+  const rawTaxRate =
     region === "SP"
       ? input.taxSP
       : region === "SUL_SUDESTE"
         ? input.taxSulSudeste
         : input.taxNNECOES;
+
+  // Normaliza: se o imposto foi salvo como decimal (ex: 0.091204), converte para % (9.1204)
+  const taxRate = rawTaxRate < 1 ? rawTaxRate * 100 : rawTaxRate;
 
   // Fórmula: Fator = (100 - Margem - Imposto) / 100
   // Preço = Custo / Fator
