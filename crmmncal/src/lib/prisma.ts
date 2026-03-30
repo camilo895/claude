@@ -1,17 +1,17 @@
-let _prisma: any;
+import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-export function getPrisma() {
-  if (!_prisma) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { PrismaClient } = require("@/generated/prisma/client");
-    _prisma = new PrismaClient();
-  }
-  return _prisma;
+const globalForPrisma = globalThis as unknown as {
+  prisma: InstanceType<typeof PrismaClient> | undefined;
+};
+
+function createClient() {
+  const connectionString = process.env.DATABASE_URL!;
+  const adapter = new PrismaPg(connectionString);
+  return new PrismaClient({ adapter });
 }
 
-// For convenience - lazy getter
-export const prisma = new Proxy({} as any, {
-  get(_target, prop) {
-    return getPrisma()[prop];
-  },
-});
+export const prisma = globalForPrisma.prisma ?? createClient();
+
+if (process.env.NODE_ENV !== "production")
+  globalForPrisma.prisma = prisma;

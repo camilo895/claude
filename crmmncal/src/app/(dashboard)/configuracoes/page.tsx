@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Save, Users, Bell, Target } from "lucide-react";
+import { Save, Users, Bell, Target, Upload } from "lucide-react";
+import Link from "next/link";
 
 export default function ConfiguracoesPage() {
   const [followUpDays, setFollowUpDays] = useState({
@@ -13,6 +14,27 @@ export default function ConfiguracoesPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
+
+      {/* Upload tabela de preços */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Upload className="w-5 h-5 text-green-500" />
+          <h2 className="text-lg font-semibold text-gray-900">
+            Tabela de Preços
+          </h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Importe ou atualize a tabela de preços a partir de um arquivo Excel ou CSV.
+          Produtos com o mesmo código serão atualizados automaticamente.
+        </p>
+        <Link
+          href="/configuracoes/tabela-precos"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Upload className="w-4 h-4" />
+          Importar Tabela de Preços
+        </Link>
+      </div>
 
       {/* Follow-up */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
