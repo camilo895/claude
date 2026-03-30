@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Search, Plus, Trash2, FileDown, Send } from "lucide-react";
 import { formatBRL, calculatePrice } from "@/lib/pricing";
 import {
@@ -31,6 +32,7 @@ interface QuotationItem {
 
 export default function NovaCotacaoPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerState, setCustomerState] = useState("SP");
@@ -135,7 +137,7 @@ export default function NovaCotacaoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: customer.id,
-          sellerId: "temp", // Will be replaced with session user
+          sellerId: session?.user?.id ?? "",
           marketType,
           notes,
           totalCost,

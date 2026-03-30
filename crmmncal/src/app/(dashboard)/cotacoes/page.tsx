@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { FileText, Send, Eye, Filter } from "lucide-react";
 import { formatBRL } from "@/lib/pricing";
 
@@ -131,9 +132,9 @@ export default function CotacoesPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded cursor-pointer" title="Ver detalhes">
+                      <Link href={`/cotacoes/${q.id}`} className="p-1.5 text-gray-400 hover:text-gray-600 rounded" title="Ver detalhes">
                         <Eye className="w-4 h-4" />
-                      </button>
+                      </Link>
                       {q.customer.phone && q.status !== "GANHA" && q.status !== "PERDIDA" && (
                         <a
                           href={`https://wa.me/55${q.customer.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Segue cotação #${q.number} no valor de ${formatBRL(q.totalPrice)}`)}`}
