@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   Home,
-  Search,
+  Tag,
   FileText,
   LayoutDashboard,
   BarChart3,
@@ -13,22 +13,40 @@ import {
   LogOut,
   Menu,
   X,
+  TableProperties,
 } from "lucide-react";
 import { useState } from "react";
 
-const navigation = [
+const baseNav = [
   { name: "Dashboard", href: "/", icon: Home },
-  { name: "Tabela de Preços", href: "/precos", icon: Search },
+  { name: "Consulta de Preços", href: "/precos", icon: Tag },
   { name: "Cotações", href: "/cotacoes", icon: FileText },
   { name: "CRM", href: "/crm", icon: LayoutDashboard },
   { name: "Performance", href: "/performance", icon: BarChart3 },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
+const managerNav = [
+  { name: "Dashboard", href: "/", icon: Home },
+  { name: "Consulta de Preços", href: "/precos", icon: Tag },
+  { name: "Gestão de Preços", href: "/precos/gestao", icon: TableProperties },
+  { name: "Cotações", href: "/cotacoes", icon: FileText },
+  { name: "CRM", href: "/crm", icon: LayoutDashboard },
+  { name: "Performance", href: "/performance", icon: BarChart3 },
+  { name: "Configurações", href: "/configuracoes", icon: Settings },
+];
+
+function isManager(role?: string) {
+  return ["COORDENADOR", "GERENTE", "DIRETOR"].includes(role ?? "");
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const role = (session?.user as { role?: string })?.role;
+  const navigation = isManager(role) ? managerNav : baseNav;
 
   const navContent = (
     <>
@@ -39,22 +57,31 @@ export default function Sidebar() {
         <span className="text-lg font-semibold text-white">CRM Mancal</span>
       </div>
 
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-4 space-y-0.5">
         {navigation.map((item) => {
-          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href || pathname.startsWith(item.href + "/");
+
+          // Indenta "Gestão de Preços" visualmente sob "Consulta"
+          const isSubItem = item.href === "/precos/gestao";
+
           return (
             <Link
               key={item.name}
               href={item.href}
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isSubItem ? "ml-4 py-2" : ""
+              } ${
                 isActive
                   ? "bg-gray-700 text-white"
                   : "text-gray-300 hover:bg-gray-700/50 hover:text-white"
               }`}
             >
-              <item.icon className="w-5 h-5 shrink-0" />
-              {item.name}
+              <item.icon className={`shrink-0 ${isSubItem ? "w-4 h-4" : "w-5 h-5"}`} />
+              <span className={isSubItem ? "text-xs" : ""}>{item.name}</span>
             </Link>
           );
         })}
@@ -64,19 +91,13 @@ export default function Sidebar() {
         <div className="px-4 py-4 border-t border-gray-700">
           <div className="flex items-center gap-3">
             {session.user.image && (
-              <img
-                src={session.user.image}
-                alt=""
-                className="w-8 h-8 rounded-full"
-              />
+              <img src={session.user.image} alt="" className="w-8 h-8 rounded-full" />
             )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
                 {session.user.name}
               </p>
-              <p className="text-xs text-gray-400 truncate">
-                {session.user.role}
-              </p>
+              <p className="text-xs text-gray-400 truncate">{role}</p>
             </div>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
@@ -93,7 +114,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-gray-800 text-white cursor-pointer"
@@ -101,7 +121,6 @@ export default function Sidebar() {
         {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-30"
@@ -109,7 +128,6 @@ export default function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gray-800 flex flex-col transition-transform lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"

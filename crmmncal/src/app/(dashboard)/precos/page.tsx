@@ -51,7 +51,6 @@ interface Product {
 interface CartItem {
   product: Product;
   quantity: number;
-  margin: number;
   discount: number; // % de desconto sobre o preço final
   region: TaxRegion;
 }
@@ -79,7 +78,7 @@ export default function PrecosPage() {
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Cart
+  // Cart (margem sempre vem do banco — marginDefault gerenciado pela gestão)
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
 
@@ -134,12 +133,12 @@ export default function PrecosPage() {
     return () => clearTimeout(t);
   }, [query, brand, search]);
 
-  // Preço calculado
-  function unitPrice(product: Product, margin: number, discount: number) {
+  // Preço calculado — usa sempre marginDefault do produto (definida pela gestão)
+  function unitPrice(product: Product, discount: number) {
     const base = calculatePrice(
       {
         costPrice: product.costPrice,
-        margin,
+        margin: product.marginDefault,
         taxSP: product.taxSP,
         taxSulSudeste: product.taxSulSudeste,
         taxNNECOES: product.taxNNECOES,
@@ -167,7 +166,6 @@ export default function PrecosPage() {
         {
           product,
           quantity: 1,
-          margin: product.marginDefault,
           discount: 0,
           region,
         },
@@ -182,14 +180,14 @@ export default function PrecosPage() {
     setCart((prev) => prev.filter((i) => i.product.id !== id));
   }
 
-  function updateCart(id: string, field: "quantity" | "margin" | "discount", value: number) {
+  function updateCart(id: string, field: "quantity" | "discount", value: number) {
     setCart((prev) =>
       prev.map((i) => (i.product.id === id ? { ...i, [field]: value } : i))
     );
   }
 
   const cartTotal = cart.reduce((sum, item) => {
-    const p = unitPrice(item.product, item.margin, item.discount);
+    const p = unitPrice(item.product, item.discount);
     return sum + p.finalPrice * item.quantity;
   }, 0);
 
@@ -198,7 +196,7 @@ export default function PrecosPage() {
       cart.map((i) => ({
         productId: i.product.id,
         quantity: i.quantity,
-        margin: i.margin,
+        margin: i.product.marginDefault,
         discount: i.discount,
       }))
     )
@@ -258,7 +256,7 @@ export default function PrecosPage() {
             <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-50">
               <ul className="divide-y divide-gray-50 max-h-[480px] overflow-y-auto">
                 {results.map((product) => {
-                  const p = unitPrice(product, product.marginDefault, 0);
+                  const p = unitPrice(product, 0);
                   const inCart = cart.some((i) => i.product.id === product.id);
                   return (
                     <li key={product.id}>
@@ -474,7 +472,7 @@ export default function PrecosPage() {
                 {/* Lista de itens */}
                 <div className="divide-y divide-gray-50">
                   {cart.map((item) => {
-                    const p = unitPrice(item.product, item.margin, item.discount);
+                    const p = unitPrice(item.product, item.discount);
                     const discountExceeded = item.discount > discountLimit;
                     return (
                       <div key={item.product.id} className="px-5 py-4">
@@ -532,28 +530,6 @@ export default function PrecosPage() {
                             </button>
                           </div>
 
-                          {/* Margem — só para gestores */}
-                          {showCost && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-gray-400">Margem</span>
-                              <input
-                                type="number"
-                                value={item.margin}
-                                onChange={(e) =>
-                                  updateCart(
-                                    item.product.id,
-                                    "margin",
-                                    parseFloat(e.target.value) || 0
-                                  )
-                                }
-                                className="w-16 px-2 py-1.5 text-center text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                min={0}
-                                step={1}
-                              />
-                              <span className="text-xs text-gray-400">%</span>
-                            </div>
-                          )}
-
                           {/* Desconto */}
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs text-gray-400">Desconto</span>
@@ -609,11 +585,14 @@ export default function PrecosPage() {
                           </div>
                         </div>
 
-                        {/* Linha 3: custo + margem R$ — só gestores */}
+                        {/* Linha 3: info financeira — só gestores */}
                         {showCost && (
-                          <div className="flex gap-4 mt-2 pt-2 border-t border-gray-50">
+                          <div className="flex flex-wrap gap-4 mt-2 pt-2 border-t border-gray-50">
                             <span className="text-xs text-gray-400">
                               Custo: <strong className="text-gray-600">{formatBRL(item.product.costPrice)}</strong>
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              Margem: <strong className="text-gray-600">{item.product.marginDefault}%</strong>
                             </span>
                             <span className="text-xs text-gray-400">
                               Margem R$:{" "}
@@ -622,7 +601,7 @@ export default function PrecosPage() {
                               </strong>
                             </span>
                             <span className="text-xs text-gray-400">
-                              Imposto: <strong className="text-gray-600">{p.taxRate.toFixed(4)}%</strong>
+                              Imposto: <strong className="text-gray-600">{p.taxRate.toFixed(2)}%</strong>
                             </span>
                           </div>
                         )}
