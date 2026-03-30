@@ -28,10 +28,16 @@ export function calculatePrice(
         ? input.taxSulSudeste
         : input.taxNNECOES;
 
-  const factor = conversionFactor / 100;
-  const priceWithMargin = costPrice * (1 + margin / 100);
-  const unitPrice = priceWithMargin * (1 + taxRate / 100) * factor;
-  const marginAmount = unitPrice - costPrice * factor;
+  // Fórmula: Fator = (100 - Margem - Imposto) / 100
+  // Preço = Custo / Fator
+  // Ex: Custo=379,64 / (100-15-9,12)/100 = 379,64/0,7588 = 500,32
+  const baseFactor = (100 - margin - taxRate) / 100;
+
+  // Fator de conversão para exportação (padrão 100 = mercado interno)
+  const exportFactor = conversionFactor / 100;
+
+  const unitPrice = baseFactor > 0 ? (costPrice / baseFactor) * exportFactor : 0;
+  const marginAmount = unitPrice - costPrice * exportFactor;
 
   return {
     unitPrice: Math.round(unitPrice * 100) / 100,
