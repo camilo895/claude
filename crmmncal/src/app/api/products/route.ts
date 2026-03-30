@@ -10,17 +10,23 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") ?? "50");
   const skip = (page - 1) * limit;
 
-  const where = search
-    ? {
-        active: true,
-        OR: [
-          { code: { contains: search, mode: "insensitive" as const } },
-          { description: { contains: search, mode: "insensitive" as const } },
-          { reference: { contains: search, mode: "insensitive" as const } },
-          { brand: { contains: search, mode: "insensitive" as const } },
-        ],
-      }
-    : { active: true };
+  const brandFilter = searchParams.get("brand") ?? "";
+
+  const where = {
+    active: true,
+    ...(brandFilter ? { brand: { equals: brandFilter, mode: "insensitive" as const } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { code: { contains: search, mode: "insensitive" as const } },
+            { description: { contains: search, mode: "insensitive" as const } },
+            { reference: { contains: search, mode: "insensitive" as const } },
+            { brand: { contains: search, mode: "insensitive" as const } },
+            { series: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
