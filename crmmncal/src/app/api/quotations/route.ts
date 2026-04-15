@@ -11,9 +11,12 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") ?? "20");
   const skip = (page - 1) * limit;
 
+  const search = searchParams.get("search") ?? "";
+
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
   if (sellerId) where.sellerId = sellerId;
+  if (search) where.customer = { name: { contains: search, mode: "insensitive" } };
 
   const [quotations, total] = await Promise.all([
     prisma.quotation.findMany({
@@ -22,9 +25,10 @@ export async function GET(req: NextRequest) {
       take: limit,
       orderBy: { createdAt: "desc" },
       include: {
-        customer: { select: { name: true, phone: true, state: true } },
+        customer: { select: { name: true, phone: true, state: true, city: true } },
         seller: { select: { name: true } },
-        _count: { select: { items: true, followUps: true } },
+        followUps: { select: { dueDate: true, status: true }, orderBy: { dueDate: "asc" } },
+        _count: { select: { items: true } },
       },
     }),
     prisma.quotation.count({ where }),
